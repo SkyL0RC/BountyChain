@@ -3,12 +3,15 @@
 
 export class WalrusClient {
   constructor(network = 'testnet') {
-    // Walrus aggregator endpoints
+    // Walrus publisher endpoints (updated for new testnet)
     this.endpoints = {
-      testnet: 'https://aggregator.walrus-testnet.walrus.space',
-      mainnet: 'https://aggregator.walrus.space'
+      testnet: 'https://wal-publisher-testnet.staketab.org',
+      mainnet: 'https://publisher.walrus.space'
     };
     this.baseUrl = this.endpoints[network];
+    // TEMPORARY: Use mock storage due to CORS issues with Walrus testnet
+    // Set to false when Walrus is properly configured
+    this.useMockStorage = true;
   }
 
   /**
@@ -18,6 +21,11 @@ export class WalrusClient {
    * @returns {Promise<{blobId: string, suiRef: string}>}
    */
   async uploadFile(file, epochs = 30) {
+    // TEMPORARY: Mock storage for testing
+    if (this.useMockStorage) {
+      return this._mockUpload(file);
+    }
+
     try {
       const formData = new FormData();
       formData.append('file', file);
@@ -78,6 +86,11 @@ export class WalrusClient {
    * @returns {Promise<Blob>}
    */
   async downloadFile(blobId) {
+    // TEMPORARY: Mock storage for testing
+    if (this.useMockStorage && blobId.startsWith('mock_')) {
+      return this._mockDownload(blobId);
+    }
+
     try {
       const response = await fetch(`${this.baseUrl}/v1/${blobId}`);
       
@@ -119,6 +132,16 @@ export class WalrusClient {
    * @param {number} epochs 
    */
   async uploadFileWithProgress(file, onProgress, epochs = 30) {
+    // TEMPORARY: Mock storage for testing
+    if (this.useMockStorage) {
+      // Simulate progress
+      for (let i = 0; i <= 100; i += 10) {
+        onProgress(i);
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      return this._mockUpload(file);
+    }
+
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
 
@@ -196,6 +219,65 @@ export class WalrusClient {
     return '0x' + Array.from(bytes)
       .map(b => b.toString(16).padStart(2, '0'))
       .join('');
+  }
+
+  /**
+   * MOCK STORAGE: localStorage ile test için
+   * @private
+   */
+  async _mockUpload(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const base64 = reader.result.split(',')[1];
+          const blobId = 'mock_' + Math.random().toString(36).substring(7);
+          
+          // localStorage'a kaydet
+          const mockData = {
+            data: base64,
+            name: file.name,
+            type: file.type,
+            size: file.size,
+            timestamp: Date.now()
+          };
+          localStorage.setItem(`walrus_${blobId}`, JSON.stringify(mockData));
+          
+          console.log('Mock storage: File saved to localStorage', blobId);
+          
+          resolve({
+            blobId: blobId,
+            suiRef: 'mock_sui_' + blobId,
+            size: file.size,
+            storedEpoch: 0
+          });
+        } catch (error) {
+          reject(new Error('Mock storage failed: ' + error.message));
+        }
+      };
+      reader.onerror = () => reject(new Error('File read failed'));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  /**
+   * MOCK STORAGE: localStorage'dan oku
+   * @private
+   */
+  async _mockDownload(blobId) {
+    const dataStr = localStorage.getItem(`walrus_${blobId}`);
+    if (!dataStr) {
+      throw new Error('Mock blob not found: ' + blobId);
+    }
+    
+    const mockData = JSON.parse(dataStr);
+    const binaryString = atob(mockData.data);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    
+    return new Blob([bytes], { type: mockData.type });
   }
 }
 

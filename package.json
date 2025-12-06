@@ -8,7 +8,9 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "deploy": "bash scripts/deploy.sh"
+    "deploy": "bash scripts/deploy.sh",
+    "test:contracts": "bash scripts/test-contracts.sh",
+    "test:frontend": "bash scripts/test-frontend.sh"
   },
   "dependencies": {
     "@mysten/dapp-kit": "^0.19.11",

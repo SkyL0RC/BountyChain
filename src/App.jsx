@@ -7,6 +7,7 @@ import Leaderboard from './pages/Leaderboard';
 import Profile from './pages/Profile';
 import CreateBounty from './pages/CreateBounty';
 import MiniHack from './pages/MiniHack';
+import ReviewSubmissions from './pages/ReviewSubmissions';
 
 function App() {
   return (
@@ -22,6 +23,7 @@ function App() {
           <Route path="/profile/:address" element={<Profile />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/create-bounty" element={<CreateBounty />} />
+          <Route path="/review/:bountyId" element={<ReviewSubmissions />} />
         </Routes>
       </div>
     </Router>

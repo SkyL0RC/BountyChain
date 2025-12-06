@@ -23,6 +23,8 @@ export default function CreateBounty() {
     mediumReward: '',
     lowReward: '',
     deadlineDays: '30',
+    usePlatformReview: false,      // Yeni: Platform kontrolü
+    reviewTimeoutDays: '7',        // Yeni: Timeout süresi
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -87,6 +89,8 @@ export default function CreateBounty() {
           tx.pure.u64(mediumInMist),
           tx.pure.u64(lowInMist),
           tx.pure.u64(parseInt(formData.deadlineDays)),
+          tx.pure.bool(formData.usePlatformReview),    // Yeni
+          tx.pure.u64(parseInt(formData.reviewTimeoutDays)), // Yeni
           tx.object('0x6'), // Clock object
         ],
       });
@@ -353,6 +357,66 @@ export default function CreateBounty() {
               <option value="60">60 days</option>
               <option value="90">90 days</option>
             </select>
+          </div>
+        </div>
+        
+        <div className="form-section review-mode-section">
+          <h3>
+            <Shield size={24} />
+            Review Configuration
+          </h3>
+          
+          <div className="review-mode-card">
+            <div className="review-option">
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  name="usePlatformReview"
+                  checked={formData.usePlatformReview}
+                  onChange={(e) => setFormData({...formData, usePlatformReview: e.target.checked})}
+                />
+                <div className="checkbox-content">
+                  <span className="checkbox-title">
+                    Enable Platform Review
+                    <span className="badge badge-fee">5% Fee</span>
+                  </span>
+                  <p className="checkbox-desc">
+                    BountyChain validators will review and approve submissions for you. 
+                    Professional verification with a 5% platform fee (vs 3% if you review yourself).
+                  </p>
+                </div>
+              </label>
+            </div>
+            
+            <div className="form-group">
+              <label>
+                Review Timeout (Days) *
+                <span className="label-hint">
+                  If you don't review within this time, platform will review (10% fee)
+                </span>
+              </label>
+              <select
+                name="reviewTimeoutDays"
+                className="form-select"
+                value={formData.reviewTimeoutDays}
+                onChange={handleChange}
+                required
+              >
+                <option value="3">3 days</option>
+                <option value="7">7 days (Recommended)</option>
+                <option value="14">14 days</option>
+                <option value="30">30 days</option>
+              </select>
+              <div className="info-box">
+                <AlertCircle size={16} />
+                <span>
+                  {formData.usePlatformReview 
+                    ? 'Platform will review submissions immediately (5% fee). If you review yourself: 3% fee.'
+                    : `You review: 3% fee. If you don't review within ${formData.reviewTimeoutDays} days: 10% fee (platform auto-review).`
+                  }
+                </span>
+              </div>
+            </div>
           </div>
         </div>
 

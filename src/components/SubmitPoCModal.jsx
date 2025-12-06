@@ -134,7 +134,7 @@ export default function SubmitPoCModal({ hackTitle, reward, bountyId, bountyOwne
       
       // submit_poc fonksiyonunu çağır
       tx.moveCall({
-        target: `${process.env.VITE_PACKAGE_ID}::bounty_manager::submit_poc`,
+        target: `${import.meta.env.VITE_PACKAGE_ID}::bounty_manager::submit_poc`,
         arguments: [
           tx.object(bountyId),
           tx.pure.vector('u8', Array.from(walrusBlobBytes)),
