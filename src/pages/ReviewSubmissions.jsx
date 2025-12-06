@@ -1,16 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useCurrentAccount, useSignAndExecuteTransaction, useSuiClient } from '@mysten/dapp-kit';
-import { Transaction } from '@mysten/sui/transactions';
+import { useCurrentAccount } from '@mysten/dapp-kit';
 import { Check, X, Clock, AlertCircle, Shield, ExternalLink } from 'lucide-react';
-import { getWalrusClient } from '../utils/walrus';
-import { getSealClient } from '../utils/seal';
+
+const API_BASE_URL = 'http://localhost:3001/api';
 
 export default function ReviewSubmissions() {
   const { bountyId } = useParams();
   const currentAccount = useCurrentAccount();
-  const { mutate: signAndExecute } = useSignAndExecuteTransaction();
-  const suiClient = useSuiClient();
   const navigate = useNavigate();
 
   const [bounty, setBounty] = useState(null);
@@ -27,41 +24,18 @@ export default function ReviewSubmissions() {
 
   const loadBountyAndSubmissions = async () => {
     try {
-      const bountyObject = await suiClient.getObject({
-        id: bountyId,
-        options: { showContent: true }
-      });
+      // Get bounty details
+      const bountyRes = await fetch(`${API_BASE_URL}/bounties/${bountyId}`);
+      if (!bountyRes.ok) throw new Error('Bounty not found');
+      const bountyData = await bountyRes.json();
+      setBounty(bountyData.bounty);
 
-      if (bountyObject.data) {
-        const content = bountyObject.data.content.fields;
-        setBounty(content);
-        
-        // Parse submissions
-        const subs = content.submissions || [];
-        const statuses = content.submission_statuses || [];
-        
-        const parsedSubmissions = subs.map((sub, index) => ({
-          index,
-          submitter: sub.fields.submitter,
-          walrus_blob_id: sub.fields.walrus_blob_id,
-          seal_encrypted_data: sub.fields.seal_encrypted_data,
-          submitted_at: parseInt(sub.fields.submitted_at),
-          severity: parseInt(sub.fields.severity),
-          status: statuses[index] ? {
-            is_reviewed: statuses[index].fields.is_reviewed,
-            is_approved: statuses[index].fields.is_approved,
-            reviewed_at: parseInt(statuses[index].fields.reviewed_at),
-            review_notes: statuses[index].fields.review_notes
-          } : {
-            is_reviewed: false,
-            is_approved: false,
-            reviewed_at: 0,
-            review_notes: ''
-          }
-        }));
-        
-        setSubmissions(parsedSubmissions);
-      }
+      // Get submissions for this bounty
+      const reportsRes = await fetch(`${API_BASE_URL}/reports/bounty/${bountyId}`);
+      if (!reportsRes.ok) throw new Error('Failed to fetch reports');
+      const reportsData = await reportsRes.json();
+      setSubmissions(reportsData.reports || []);
+
     } catch (error) {
       console.error('Error loading bounty:', error);
     } finally {
@@ -71,96 +45,95 @@ export default function ReviewSubmissions() {
 
   const handleDownloadAndDecrypt = async (submission) => {
     try {
-      const walrus = getWalrusClient();
-      const seal = getSealClient();
+      // Fetch full report details including encrypted data
+      const reportRes = await fetch(`${API_BASE_URL}/reports/${submission.id}`);
+      if (!reportRes.ok) throw new Error('Failed to fetch report');
+      const reportData = await reportRes.json();
       
-      // Download from Walrus
-      const blobIdHex = '0x' + Buffer.from(submission.walrus_blob_id).toString('hex');
-      const fileData = await walrus.downloadFile(blobIdHex);
-      
-      // Decrypt with Seal (if encrypted)
-      if (submission.seal_encrypted_data && submission.seal_encrypted_data.length > 0) {
-        const encryptedDataHex = '0x' + Buffer.from(submission.seal_encrypted_data).toString('hex');
-        const decrypted = await seal.decryptFile(encryptedDataHex, currentAccount.address);
-        setDecryptedContent(decrypted);
-      } else {
-        setDecryptedContent(fileData);
-      }
+      // TODO: Decrypt with owner's private key
+      // For now, show encrypted data
+      setDecryptedContent(JSON.stringify({
+        encryptedPayload: reportData.encryptedPayload,
+        encryptedKey: reportData.encryptedKey,
+        note: 'Decrypt functionality will be added'
+      }, null, 2));
       
       setSelectedSubmission(submission);
     } catch (error) {
-      console.error('Error downloading/decrypting:', error);
-      alert('Failed to download or decrypt submission');
+      console.error('Error downloading report:', error);
+      alert('Failed to download report');
     }
   };
 
-  const handleReview = async (submissionIndex, approve) => {
+  const handleReview = async (reportId, approve) => {
     if (!currentAccount) {
       alert('Please connect wallet');
       return;
     }
 
-    setReviewing(submissionIndex);
+    setReviewing(reportId);
 
     try {
-      const tx = new Transaction();
-
-      tx.moveCall({
-        target: `${import.meta.env.VITE_PACKAGE_ID}::bounty_manager::review_submission`,
-        arguments: [
-          tx.object(import.meta.env.VITE_BOUNTY_REGISTRY_ID),
-          tx.object(bountyId),
-          tx.pure.u64(submissionIndex),
-          tx.pure.bool(approve),
-          tx.pure.string(reviewNotes || (approve ? 'Approved' : 'Rejected')),
-          tx.object('0x6'), // Clock
-        ],
+      const response = await fetch(`${API_BASE_URL}/reports/${reportId}/status`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          status: approve ? 'approved' : 'rejected',
+          walletAddress: currentAccount.address
+        }),
       });
 
-      signAndExecute(
-        { transaction: tx },
-        {
-          onSuccess: () => {
-            alert(approve ? 'Submission approved!' : 'Submission rejected!');
-            loadBountyAndSubmissions();
-            setSelectedSubmission(null);
-            setReviewNotes('');
-          },
-          onError: (error) => {
-            console.error('Review error:', error);
-            alert('Failed to review submission');
-          }
-        }
-      );
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to update status');
+      }
+
+      alert(approve ? 'Report approved!' : 'Report rejected!');
+      await loadBountyAndSubmissions();
+      setSelectedSubmission(null);
+      setReviewNotes('');
+
     } catch (error) {
-      console.error('Error:', error);
-      alert('Error reviewing submission');
+      console.error('Review error:', error);
+      alert('Error: ' + error.message);
     } finally {
       setReviewing(null);
     }
   };
 
-  const getSeverityLabel = (severity) => {
-    const labels = ['Low', 'Medium', 'High', 'Critical'];
-    return labels[severity] || 'Unknown';
+  const getStatusLabel = (status) => {
+    const labels = {
+      pending: 'Pending Review',
+      approved: 'Approved',
+      rejected: 'Rejected',
+      disputed: 'Disputed'
+    };
+    return labels[status] || status;
   };
 
-  const getSeverityColor = (severity) => {
-    const colors = ['#10b981', '#f59e0b', '#ef4444', '#dc2626'];
-    return colors[severity] || '#6b7280';
+  const getStatusColor = (status) => {
+    const colors = {
+      pending: '#f59e0b',
+      approved: '#10b981',
+      rejected: '#ef4444',
+      disputed: '#8b5cf6'
+    };
+    return colors[status] || '#6b7280';
   };
 
-  const getTimeRemaining = (timeoutDays, submittedAt) => {
-    const timeoutMs = timeoutDays * 24 * 60 * 60 * 1000;
-    const elapsedMs = Date.now() - submittedAt;
-    const remainingMs = timeoutMs - elapsedMs;
+  const getTimeRemaining = (autoApproveAt) => {
+    if (!autoApproveAt) return 'No timeout';
     
-    if (remainingMs <= 0) return 'Timeout reached';
+    const remainingMs = new Date(autoApproveAt) - Date.now();
+    
+    if (remainingMs <= 0) return 'Auto-approved';
     
     const days = Math.floor(remainingMs / (24 * 60 * 60 * 1000));
     const hours = Math.floor((remainingMs % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
     
-    return `${days}d ${hours}h remaining`;
+    return `${days}d ${hours}h until auto-approve`;
   };
 
   if (loading) {
@@ -171,9 +144,7 @@ export default function ReviewSubmissions() {
     return <div className="container"><div className="error">Bounty not found</div></div>;
   }
 
-  const isOwner = currentAccount && currentAccount.address === bounty.creator;
-  const reviewTimeout = parseInt(bounty.review_mode?.fields?.review_timeout_days || 7);
-  const usePlatformReview = bounty.review_mode?.fields?.use_platform_review || false;
+  const isOwner = currentAccount && currentAccount.address === bounty.ownerWallet;
 
   return (
     <div className="container review-page">
@@ -185,9 +156,7 @@ export default function ReviewSubmissions() {
         {isOwner && (
           <div className="review-mode-badge">
             <Shield size={20} />
-            <span>
-              {usePlatformReview ? 'Platform Review (5%)' : 'Manual Review'}
-            </span>
+            <span>Your Bounty</span>
           </div>
         )}
       </div>
@@ -195,13 +164,8 @@ export default function ReviewSubmissions() {
       <div className="review-info-banner">
         <AlertCircle size={24} />
         <div>
-          <strong>Review Timeout: {reviewTimeout} days</strong>
-          <p>
-            {usePlatformReview 
-              ? 'Platform validators can review immediately with 5% fee'
-              : `You have ${reviewTimeout} days to review each submission. After that, platform reviews automatically with 10% fee.`
-            }
-          </p>
+          <strong>Auto-Approve: 7 days</strong>
+          <p>Pending reports will be automatically approved after 7 days if not reviewed.</p>
         </div>
       </div>
 
@@ -212,58 +176,45 @@ export default function ReviewSubmissions() {
           </div>
         ) : (
           submissions.map((submission) => (
-            <div key={submission.index} className="submission-card">
+            <div key={submission.id} className="submission-card">
               <div className="submission-header">
                 <div className="submission-meta">
-                  <span className="submission-index">#{submission.index + 1}</span>
+                  <span className="submission-index">Report ID: {submission.id.substring(0, 8)}...</span>
                   <span 
                     className="severity-badge"
-                    style={{ background: getSeverityColor(submission.severity) }}
+                    style={{ background: getStatusColor(submission.status) }}
                   >
-                    {getSeverityLabel(submission.severity)}
+                    {getStatusLabel(submission.status)}
                   </span>
-                  {submission.status.is_reviewed && (
-                    <span className={`review-status ${submission.status.is_approved ? 'approved' : 'rejected'}`}>
-                      {submission.status.is_approved ? <Check size={16} /> : <X size={16} />}
-                      {submission.status.is_approved ? 'Approved' : 'Rejected'}
-                    </span>
-                  )}
                 </div>
                 
-                {!submission.status.is_reviewed && isOwner && (
+                {submission.status === 'pending' && isOwner && (
                   <div className="timeout-warning">
                     <Clock size={16} />
-                    <span>{getTimeRemaining(reviewTimeout, submission.submitted_at)}</span>
+                    <span>{getTimeRemaining(submission.auto_approve_at)}</span>
                   </div>
                 )}
               </div>
 
               <div className="submission-body">
                 <div className="info-row">
-                  <span className="label">Submitter:</span>
-                  <span className="value address">{submission.submitter.slice(0, 6)}...{submission.submitter.slice(-4)}</span>
+                  <span className="label">Hacker:</span>
+                  <span className="value address">{submission.hacker_wallet.slice(0, 6)}...{submission.hacker_wallet.slice(-4)}</span>
                 </div>
                 <div className="info-row">
                   <span className="label">Submitted:</span>
-                  <span className="value">{new Date(submission.submitted_at).toLocaleString()}</span>
+                  <span className="value">{new Date(submission.created_at).toLocaleString()}</span>
                 </div>
-                
-                {submission.status.is_reviewed && (
-                  <div className="review-notes">
-                    <strong>Review Notes:</strong>
-                    <p>{submission.status.review_notes || 'No notes'}</p>
-                  </div>
-                )}
               </div>
 
-              {!submission.status.is_reviewed && isOwner && (
+              {submission.status === 'pending' && isOwner && (
                 <div className="submission-actions">
                   <button
                     className="btn btn-secondary btn-sm"
                     onClick={() => handleDownloadAndDecrypt(submission)}
                   >
                     <ExternalLink size={16} />
-                    View Details
+                    View Encrypted Report
                   </button>
                 </div>
               )}
@@ -277,13 +228,13 @@ export default function ReviewSubmissions() {
         <div className="modal-overlay" onClick={() => setSelectedSubmission(null)}>
           <div className="modal review-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>Review Submission #{selectedSubmission.index + 1}</h2>
+              <h2>Review Report</h2>
               <button className="close-btn" onClick={() => setSelectedSubmission(null)}>×</button>
             </div>
 
             <div className="modal-body">
               <div className="submission-details">
-                <h3>Vulnerability Details</h3>
+                <h3>Encrypted Report Data</h3>
                 {decryptedContent && (
                   <div className="content-preview">
                     <pre>{decryptedContent}</pre>
@@ -306,7 +257,7 @@ export default function ReviewSubmissions() {
             <div className="modal-footer">
               <button
                 className="btn btn-danger"
-                onClick={() => handleReview(selectedSubmission.index, false)}
+                onClick={() => handleReview(selectedSubmission.id, false)}
                 disabled={reviewing !== null}
               >
                 <X size={18} />
@@ -314,11 +265,11 @@ export default function ReviewSubmissions() {
               </button>
               <button
                 className="btn btn-success"
-                onClick={() => handleReview(selectedSubmission.index, true)}
+                onClick={() => handleReview(selectedSubmission.id, true)}
                 disabled={reviewing !== null}
               >
                 <Check size={18} />
-                Approve & Pay
+                Approve
               </button>
             </div>
           </div>

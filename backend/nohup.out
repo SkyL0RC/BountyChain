@@ -1,0 +1,24 @@
+
+🚀 BountyChain MVP Backend
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📡 Server: http://localhost:3001
+🗄️  Database: bountychain_mvp@localhost
+🔐 Encryption: AES-256-GCM + RSA-2048
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📚 API Endpoints:
+  POST   /api/bounties           - Create bounty
+  GET    /api/bounties/:id       - Get bounty
+  GET    /api/bounties           - List bounties
+  POST   /api/reports            - Submit encrypted report
+  GET    /api/reports/:id        - Get encrypted report
+  GET    /api/reports/bounty/:id - List bounty reports
+  POST   /api/reports/:id/status - Update report status
+
+✅ PostgreSQL connected
+✅ Database connected
+🕒 Auto-approval job started (runs every 10 minutes)
+
+✅ Server ready!
+
+⚠️  SIGTERM received, closing server...

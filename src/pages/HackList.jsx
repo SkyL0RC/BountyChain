@@ -1,83 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Clock, Trophy, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
 
-const mockHacks = [
-  {
-    id: 1,
-    title: 'Reentrancy Guard Bypass',
-    difficulty: 'beginner',
-    reward: 50,
-    timeLeft: '2d 14h',
-    status: 'open',
-    solvers: 3
-  },
-  {
-    id: 2,
-    title: 'Flash Loan Oracle Attack',
-    difficulty: 'intermediate',
-    reward: 150,
-    timeLeft: '5d 3h',
-    status: 'open',
-    solvers: 1
-  },
-  {
-    id: 3,
-    title: 'Integer Overflow in Token Mint',
-    difficulty: 'beginner',
-    reward: 75,
-    timeLeft: 'Solved',
-    status: 'solved',
-    solvers: 8,
-    winner: '0x7a9f...3e2c'
-  },
-  {
-    id: 4,
-    title: 'Cross-Chain Bridge Exploit',
-    difficulty: 'expert',
-    reward: 500,
-    timeLeft: '6d 22h',
-    status: 'open',
-    solvers: 0
-  },
-  {
-    id: 5,
-    title: 'Access Control Vulnerability',
-    difficulty: 'intermediate',
-    reward: 120,
-    timeLeft: '4d 8h',
-    status: 'open',
-    solvers: 2
-  },
-  {
-    id: 6,
-    title: 'NFT Metadata Manipulation',
-    difficulty: 'beginner',
-    reward: 60,
-    timeLeft: '3d 16h',
-    status: 'open',
-    solvers: 5
-  },
-  {
-    id: 7,
-    title: 'Signature Replay Attack',
-    difficulty: 'intermediate',
-    reward: 180,
-    timeLeft: '1d 2h',
-    status: 'open',
-    solvers: 4
-  },
-  {
-    id: 8,
-    title: 'Governance Vote Manipulation',
-    difficulty: 'expert',
-    reward: 400,
-    timeLeft: 'Solved',
-    status: 'solved',
-    solvers: 2,
-    winner: '0x4b2f...8d1a'
-  }
-];
+// API base URL
+const API_BASE_URL = 'http://localhost:3001/api';
 
 const pastWeeks = [
   {
@@ -104,35 +30,78 @@ const pastWeeks = [
 ];
 
 export default function HackList() {
+  const [bounties, setBounties] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [showArchive, setShowArchive] = useState(false);
   const [statusFilter, setStatusFilter] = useState('all');
   const [difficultyFilter, setDifficultyFilter] = useState('all');
   const [sortBy, setSortBy] = useState('reward-desc');
 
+  // Backend'den bounty'leri çek
+  useEffect(() => {
+    const fetchBounties = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch(`${API_BASE_URL}/bounties`);
+        if (!response.ok) throw new Error('Failed to fetch bounties');
+        const data = await response.json();
+        setBounties(data.bounties || []);
+      } catch (err) {
+        console.error('Error fetching bounties:', err);
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchBounties();
+  }, []);
+
   // Filtreleme ve sıralama
-  let filteredHacks = [...mockHacks];
+  let filteredHacks = [...bounties];
 
   // Status filtresi
   if (statusFilter === 'active') {
-    filteredHacks = filteredHacks.filter(h => h.status === 'open');
+    filteredHacks = filteredHacks.filter(h => h.status === 'active');
   } else if (statusFilter === 'expired') {
-    filteredHacks = filteredHacks.filter(h => h.status === 'solved');
-  } else if (statusFilter === 'my-submissions') {
-    filteredHacks = []; // Backend entegrasyonu sonrası kullanıcının submission'larını göster
+    filteredHacks = filteredHacks.filter(h => h.status === 'expired');
   }
 
-  // Difficulty filtresi
+  // Difficulty filtresi (şimdilik backend'de difficulty yok, ileride eklenebilir)
   if (difficultyFilter !== 'all') {
     filteredHacks = filteredHacks.filter(h => h.difficulty === difficultyFilter);
   }
 
   // Sıralama
   if (sortBy === 'reward-desc') {
-    filteredHacks.sort((a, b) => b.reward - a.reward);
+    filteredHacks.sort((a, b) => parseFloat(b.rewardAmount) - parseFloat(a.rewardAmount));
   } else if (sortBy === 'reward-asc') {
-    filteredHacks.sort((a, b) => a.reward - b.reward);
+    filteredHacks.sort((a, b) => parseFloat(a.rewardAmount) - parseFloat(b.rewardAmount));
   } else if (sortBy === 'newest') {
-    filteredHacks.reverse();
+    filteredHacks.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  }
+
+  if (loading) {
+    return (
+      <div className="hack-list-page">
+        <div className="page-header">
+          <h1>Bug Bounties</h1>
+          <p>Loading bounties...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="hack-list-page">
+        <div className="page-header">
+          <h1>Bug Bounties</h1>
+          <p style={{ color: '#f44336' }}>Error: {error}</p>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -212,50 +181,47 @@ export default function HackList() {
           filteredHacks.map(hack => (
             <Link to={`/hack/${hack.id}`} key={hack.id} className="hack-card">
               <div className="hack-card-header">
-                <span className={`difficulty-badge ${hack.difficulty}`}>
-                  {hack.difficulty}
+                <span className={`difficulty-badge ${hack.difficulty || 'beginner'}`}>
+                  {hack.difficulty || 'standard'}
                 </span>
                 <span className={`status-badge ${hack.status}`}>
-                  {hack.status === 'open' ? (
+                  {hack.status === 'active' ? (
                     <>
                       <div className="pulse-dot"></div>
-                      Open
+                      Active
                     </>
                   ) : (
                     <>
                       <Trophy size={14} />
-                      Solved
+                      {hack.status}
                     </>
                   )}
                 </span>
               </div>
 
             <h3 className="hack-title">{hack.title}</h3>
+            {hack.description && (
+              <p className="hack-description">{hack.description.substring(0, 100)}...</p>
+            )}
 
             <div className="hack-meta">
               <div className="reward">
-                <span className="reward-amount">{hack.reward} SUI</span>
+                <span className="reward-amount">{hack.rewardAmount} SUI</span>
                 <span className="reward-label">Reward</span>
               </div>
               <div className="timer">
-                {hack.status === 'open' ? (
-                  <>
-                    <Clock size={16} />
-                    <span>{hack.timeLeft}</span>
-                  </>
-                ) : (
-                  <span className="winner-text">Winner: {hack.winner}</span>
-                )}
+                <Clock size={16} />
+                <span>{new Date(hack.createdAt).toLocaleDateString()}</span>
               </div>
             </div>
 
             <div className="hack-footer">
               <div className="solvers">
                 <AlertCircle size={14} />
-                {hack.solvers} attempting
+                View Details
               </div>
-              {hack.status === 'open' && (
-                <span className="try-label">Try Now →</span>
+              {hack.status === 'active' && (
+                <span className="try-label">Submit PoC →</span>
               )}
             </div>
           </Link>
