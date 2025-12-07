@@ -5,30 +5,6 @@ import { Clock, Trophy, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react
 // API base URL
 const API_BASE_URL = 'http://localhost:3001/api';
 
-const pastWeeks = [
-  {
-    week: 11,
-    title: 'Week 11 - Access Control Week',
-    winner: '0x7a9f...5a2f',
-    reward: 250,
-    challenges: 4
-  },
-  {
-    week: 10,
-    title: 'Week 10 - Oracle Manipulation',
-    winner: '0x4b2f...8f4b',
-    reward: 300,
-    challenges: 3
-  },
-  {
-    week: 9,
-    title: 'Week 9 - Reentrancy Special',
-    winner: '0x9c5e...9c5e',
-    reward: 200,
-    challenges: 5
-  }
-];
-
 export default function HackList() {
   const [bounties, setBounties] = useState([]);
   const [loading, setLoading] = useState(true);

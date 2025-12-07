@@ -1,14 +1,19 @@
 import { useState } from 'react';
-import { useCurrentAccount } from '@mysten/dapp-kit';
+import { useCurrentAccount, useSignAndExecuteTransaction, useDisconnectWallet, useSuiClient } from '@mysten/dapp-kit';
 import { useNavigate } from 'react-router-dom';
-import { Shield, Lock, DollarSign, Calendar, Github, Globe, AlertCircle } from 'lucide-react';
-import { createBounty } from '../utils/backendCrypto';
+import { Transaction } from '@mysten/sui/transactions';
+import { Shield, Lock, DollarSign, Calendar, Github, Globe, AlertCircle, RefreshCw } from 'lucide-react';
+import { generateKeyPair } from '../utils/backendCrypto';
 
 const API_BASE_URL = 'http://localhost:3001/api';
+const PACKAGE_ID = import.meta.env.VITE_PACKAGE_ID;
 
 export default function CreateBounty() {
   const currentAccount = useCurrentAccount();
   const navigate = useNavigate();
+  const { mutateAsync: signAndExecuteTransaction } = useSignAndExecuteTransaction();
+  const { mutate: disconnect } = useDisconnectWallet();
+  const suiClient = useSuiClient();
 
   const [formData, setFormData] = useState({
     title: '',
@@ -18,6 +23,7 @@ export default function CreateBounty() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState(null);
+  const [walletError, setWalletError] = useState(false);
 
   const handleChange = (e) => {
     setFormData({
@@ -39,29 +45,207 @@ export default function CreateBounty() {
       return;
     }
 
+    // Wallet bağlantısını kontrol et
+    if (!currentAccount.address) {
+      setError('Wallet not properly connected. Please reconnect your wallet.');
+      return;
+    }
+
     setIsSubmitting(true);
     setError(null);
 
     try {
-      const result = await createBounty(
-        formData.title,
-        formData.rewardAmount,
-        currentAccount.address,
-        formData.description
-      );
+      // 1. Generate encryption key pair
+      const keyPair = await generateKeyPair();
+      console.log('🔐 Key pair generated');
 
-      console.log('Bounty created successfully:', result);
-      alert(`Bounty created! ID: ${result.bounty.id}`);
+      // 2. Generate bounty ID
+      const bountyId = `bounty_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+      // 3. Real payment with Slush wallet
+      const SKIP_PAYMENT = false; // Real payment enabled
       
-      // Kısa bir bekleme sonrası yönlendir (database'e yazılması için)
-      setTimeout(() => {
-        navigate('/hacks');
-      }, 500);
+      let txResult = null;
+      
+      if (!SKIP_PAYMENT) {
+        // Create transaction using simplified escrow contract
+        const rewardInMIST = Math.floor(parseFloat(formData.rewardAmount) * 1_000_000_000);
+        
+        console.log(`💰 Creating bounty with ${rewardInMIST} MIST (${formData.rewardAmount} SUI)`);
+        console.log(`📦 Package: ${PACKAGE_ID}`);
+        console.log(`👤 Sender: ${currentAccount.address}`);
+        
+        const tx = new Transaction();
+        
+        // Split coin for reward
+        const [rewardCoin] = tx.splitCoins(tx.gas, [rewardInMIST]);
+        
+        // Convert string to bytes array  
+        const titleBytes = Array.from(new TextEncoder().encode(formData.title));
+        
+        // Call escrow contract
+        tx.moveCall({
+          target: `${PACKAGE_ID}::bounty_escrow::create_bounty`,
+          arguments: [
+            tx.pure.vector('u8', titleBytes),
+            rewardCoin,
+          ],
+        });
+
+        // Set gas budget
+        tx.setGasBudget(10000000);
+
+        console.log('📝 Transaction built');
+        console.log('💳 Requesting signature from wallet...');
+        console.log('🔍 Transaction details:', {
+          package: PACKAGE_ID,
+          function: 'create_bounty',
+          reward: `${formData.rewardAmount} SUI (${rewardInMIST} MIST)`,
+          sender: currentAccount.address,
+        });
+
+        // Execute transaction with proper error handling
+        try {
+          txResult = await signAndExecuteTransaction(
+            {
+              transaction: tx,
+            },
+            {
+              onSuccess: (result) => {
+                console.log('✅ Transaction successful:', result.digest);
+              },
+            }
+          );
+          
+          console.log('✅ Payment locked in escrow');
+          console.log('📋 TX Digest:', txResult.digest);
+        } catch (txError) {
+          console.error('💥 Transaction failed:', txError);
+          
+          const errorMsg = txError.message || String(txError);
+          console.error('Error message:', errorMsg);
+          
+          if (errorMsg.toLowerCase().includes('reject') || 
+              errorMsg.toLowerCase().includes('cancel') ||
+              errorMsg.toLowerCase().includes('denied')) {
+            setError('❌ Transaction Cancelled\n\nYou rejected the payment in your wallet.');
+          } else if (errorMsg.toLowerCase().includes('insufficient')) {
+            setError('❌ Insufficient Balance\n\nYou need at least:\n• ' + formData.rewardAmount + ' SUI (reward)\n• ~0.01 SUI (gas fees)');
+          } else if (errorMsg.toLowerCase().includes('session') || errorMsg.toLowerCase().includes('unlock')) {
+            setError('⚠️ Wallet Locked\n\nPlease unlock your Slush wallet and try again.');
+          } else {
+            setError('❌ Payment Failed\n\n' + errorMsg + '\n\nTroubleshooting:\n1. Make sure wallet is unlocked\n2. Check you have enough SUI\n3. Try refreshing the page');
+          }
+          setIsSubmitting(false);
+          return;
+        }
+      } else {
+        console.log('⚠️ SKIPPING PAYMENT (TEST MODE)');
+        txResult = { digest: 'TEST_TX_' + Date.now(), effects: { created: [] } };
+      }
+
+      // Extract bounty object ID from transaction result
+      console.log('🔍 Full transaction result:', JSON.stringify(txResult, null, 2));
+      
+      let bountyObjectId = null;
+      
+      // Fetch transaction details from Sui RPC to get created objects
+      try {
+        console.log('🔍 Fetching transaction details from Sui RPC...');
+        const txDetails = await suiClient.getTransactionBlock({
+          digest: txResult.digest,
+          options: {
+            showEffects: true,
+            showObjectChanges: true,
+          },
+        });
+        
+        console.log('📦 Transaction details:', txDetails);
+        
+        // Look for created shared object in objectChanges
+        if (txDetails.objectChanges) {
+          const sharedObject = txDetails.objectChanges.find(change => 
+            change.type === 'created' && 
+            change.owner && 
+            (change.owner === 'Shared' || change.owner.Shared)
+          );
+          
+          if (sharedObject) {
+            bountyObjectId = sharedObject.objectId;
+            console.log('🎯 Found Bounty Object ID:', bountyObjectId);
+          }
+        }
+        
+        // Fallback: check effects
+        if (!bountyObjectId && txDetails.effects?.created) {
+          const sharedObj = txDetails.effects.created.find(obj =>
+            obj.owner && (obj.owner === 'Shared' || obj.owner.Shared)
+          );
+          if (sharedObj) {
+            bountyObjectId = sharedObj.reference?.objectId || sharedObj.objectId;
+            console.log('🎯 Found Bounty Object ID from effects:', bountyObjectId);
+          }
+        }
+      } catch (err) {
+        console.error('❌ Failed to fetch transaction details:', err);
+      }
+
+      if (!bountyObjectId) {
+        console.error('❌ Failed to extract bounty object ID from transaction');
+        console.warn('⚠️ Bounty will be created but payment release will not work');
+      }
+
+      // 4. Payment başarılı olduktan SONRA backend'de bounty kaydı oluştur
+      console.log('📝 Creating bounty record in database...');
+      const response = await fetch(`${API_BASE_URL}/bounties`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: bountyId,
+          title: formData.title,
+          description: formData.description,
+          rewardAmount: formData.rewardAmount,
+          ownerWallet: currentAccount.address,
+          ownerPublicKey: keyPair.publicKey,
+          bountyObjectId: bountyObjectId, // Add Sui object ID
+          transactionHash: txResult.digest
+        })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        console.error('❌ Backend error:', error);
+        throw new Error(error.error || 'Failed to create bounty record');
+      }
+
+      const bountyResult = await response.json();
+      console.log('✅ Bounty record created:', bountyResult);
+
+      // 5. Store private key in localStorage
+      localStorage.setItem(`bounty_${bountyId}_privateKey`, keyPair.privateKey);
+      console.log('🔑 Private key stored in localStorage');
+
+      // 6. Backend'e transaction hash'i kaydet
+      await fetch(`${API_BASE_URL}/bounties/${bountyId}/payment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          transactionHash: txResult.digest,
+          amount: formData.rewardAmount
+        })
+      });
+      
+      alert(`✅ Bounty created successfully!\n\n💰 ${formData.rewardAmount} SUI locked in escrow\n🔗 TX: ${txResult.digest.slice(0, 16)}...`);
+      setTimeout(() => navigate('/hacks'), 500);
 
     } catch (error) {
       console.error('Bounty creation failed:', error);
+      console.error('Error details:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      });
       setError(error.message);
-    } finally {
       setIsSubmitting(false);
     }
   };
@@ -92,13 +276,46 @@ export default function CreateBounty() {
         {error && (
           <div className="error-box">
             <AlertCircle size={20} />
-            <span>{error}</span>
+            <div style={{ flex: 1 }}>
+              <span style={{ whiteSpace: 'pre-line' }}>{error}</span>
+              {walletError && (
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  style={{ marginTop: '10px' }}
+                  onClick={() => {
+                    disconnect();
+                    setWalletError(false);
+                    setError(null);
+                    window.location.reload();
+                  }}
+                >
+                  <RefreshCw size={16} />
+                  Reconnect Wallet
+                </button>
+              )}
+            </div>
           </div>
         )}
 
         <div className="form-section">
           <h3>Bounty Information</h3>
           
+          <div className="warning-box-form">
+            <Lock size={20} />
+            <Shield size={20} />
+            <div>
+              <strong>🔐 End-to-End Encryption & Escrow Payment:</strong>
+              <ul style={{ margin: '8px 0 0 20px', fontSize: '0.9em' }}>
+                <li>Encryption keys generated for your bounty</li>
+                <li>Only you can decrypt submitted reports</li>
+                <li>Private key stored in your browser (keep backup!)</li>
+                <li>Reward locked in escrow contract</li>
+                <li>Funds released only when you approve a report</li>
+              </ul>
+            </div>
+          </div>
+
           <div className="form-group">
             <label>Bounty Title *</label>
             <input
@@ -130,19 +347,14 @@ export default function CreateBounty() {
               type="number"
               name="rewardAmount"
               className="form-input"
-              placeholder="e.g., 1000"
-              step="0.01"
-              min="1"
+              placeholder="e.g., 100 or 0.5"
+              step="0.001"
+              min="0.001"
               value={formData.rewardAmount}
               onChange={handleChange}
               required
             />
-          </div>
-
-          <div className="warning-box-form">
-            <Lock size={20} />
-            <Shield size={20} />
-            <span>All reports will be encrypted with your public key. Only you can read them.</span>
+            <small style={{ color: '#888', fontSize: '0.85em' }}>Minimum: 0.001 SUI</small>
           </div>
         </div>
 
@@ -172,3 +384,4 @@ export default function CreateBounty() {
     </div>
   );
 }
+

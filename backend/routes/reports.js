@@ -230,6 +230,10 @@ router.get('/hacker/:walletAddress', async (req, res) => {
  * POST /api/reports/:id/status
  * Update report status (approve/reject/dispute)
  * 
+ * When approved:
+ * - Frontend will trigger payment from escrow to hacker
+ * - Backend records the approval
+ * 
  * Body:
  * - status: 'approved' | 'rejected' | 'disputed'
  * - walletAddress: string (for authorization check)
@@ -253,7 +257,7 @@ router.post('/:id/status', async (req, res) => {
 
     // Get report and bounty info
     const reportQuery = await pool.query(
-      `SELECT r.*, b.owner_wallet
+      `SELECT r.*, b.owner_wallet, b.reward_amount, b.transaction_hash as bounty_tx, b.bounty_object_id
        FROM reports r
        JOIN bounties b ON r.bounty_id = b.id
        WHERE r.id = $1`,
@@ -278,20 +282,36 @@ router.post('/:id/status', async (req, res) => {
       `UPDATE reports 
        SET status = $1, updated_at = now()
        WHERE id = $2
-       RETURNING id, status, updated_at`,
+       RETURNING *`,
       [status, id]
     );
 
     const updated = updateQuery.rows[0];
 
     console.log(`✅ Report ${id} status updated to: ${status}`);
-
-    res.json({
+    
+    // Return payment info if approved
+    const response = {
       success: true,
       reportId: updated.id,
       status: updated.status,
       updatedAt: updated.updated_at
-    });
+    };
+
+    if (status === 'approved') {
+      response.payment = {
+        hackerWallet: report.hacker_wallet,
+        amount: report.reward_amount,
+        bountyObjectId: report.bounty_object_id,
+        message: 'Smart contract will release payment from escrow'
+      };
+      
+      if (!report.bounty_object_id) {
+        console.warn('⚠️  Warning: bounty_object_id is missing for approved report');
+      }
+    }
+
+    res.json(response);
 
   } catch (error) {
     console.error('❌ Status update failed:', error);

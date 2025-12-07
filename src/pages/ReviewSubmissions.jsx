@@ -1,14 +1,18 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useCurrentAccount } from '@mysten/dapp-kit';
-import { Check, X, Clock, AlertCircle, Shield, ExternalLink } from 'lucide-react';
+import { useCurrentAccount, useSignAndExecuteTransaction } from '@mysten/dapp-kit';
+import { Transaction } from '@mysten/sui/transactions';
+import { Check, X, Clock, AlertCircle, Shield, ExternalLink, Key } from 'lucide-react';
+import { decryptReport } from '../utils/backendCrypto';
 
 const API_BASE_URL = 'http://localhost:3001/api';
+const PACKAGE_ID = import.meta.env.VITE_PACKAGE_ID;
 
 export default function ReviewSubmissions() {
   const { bountyId } = useParams();
   const currentAccount = useCurrentAccount();
   const navigate = useNavigate();
+  const { mutateAsync: signAndExecuteTransaction } = useSignAndExecuteTransaction();
 
   const [bounty, setBounty] = useState(null);
   const [submissions, setSubmissions] = useState([]);
@@ -50,18 +54,42 @@ export default function ReviewSubmissions() {
       if (!reportRes.ok) throw new Error('Failed to fetch report');
       const reportData = await reportRes.json();
       
-      // TODO: Decrypt with owner's private key
-      // For now, show encrypted data
-      setDecryptedContent(JSON.stringify({
-        encryptedPayload: reportData.encryptedPayload,
-        encryptedKey: reportData.encryptedKey,
-        note: 'Decrypt functionality will be added'
-      }, null, 2));
+      // Get private key from localStorage
+      const privateKey = localStorage.getItem(`bounty_${bountyId}_privateKey`);
       
+      if (!privateKey) {
+        alert('⚠️ Private key not found!\n\nYou can only decrypt reports for bounties you created on this device.');
+        return;
+      }
+
+      // Parse encrypted data
+      let encryptedPayload, encryptedKey;
+      try {
+        const reportTextObj = JSON.parse(reportData.reportText);
+        encryptedPayload = reportTextObj.encryptedPayload;
+        encryptedKey = reportTextObj.encryptedKey;
+      } catch (e) {
+        // Fallback to direct properties
+        encryptedPayload = reportData.encryptedPayload;
+        encryptedKey = reportData.encryptedKey;
+      }
+
+      if (!encryptedPayload || !encryptedKey) {
+        alert('❌ Report data is corrupted or not encrypted');
+        return;
+      }
+
+      // Decrypt report
+      console.log('🔓 Decrypting report...');
+      const decrypted = await decryptReport(encryptedPayload, encryptedKey, privateKey);
+      console.log('✅ Report decrypted successfully');
+      
+      setDecryptedContent(decrypted);
       setSelectedSubmission(submission);
+      
     } catch (error) {
-      console.error('Error downloading report:', error);
-      alert('Failed to download report');
+      console.error('Error decrypting report:', error);
+      alert('Failed to decrypt report: ' + error.message);
     }
   };
 
@@ -74,11 +102,10 @@ export default function ReviewSubmissions() {
     setReviewing(reportId);
 
     try {
+      // 1. Update status in backend first
       const response = await fetch(`${API_BASE_URL}/reports/${reportId}/status`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           status: approve ? 'approved' : 'rejected',
           walletAddress: currentAccount.address
@@ -90,14 +117,57 @@ export default function ReviewSubmissions() {
         throw new Error(error.error || 'Failed to update status');
       }
 
-      alert(approve ? 'Report approved!' : 'Report rejected!');
+      const data = await response.json();
+
+      // 2. If approved, release payment from escrow via smart contract
+      if (approve && data.payment) {
+        const { hackerWallet, bountyObjectId } = data.payment;
+        
+        if (!bountyObjectId) {
+          throw new Error('Bounty object ID not found. Cannot release payment.');
+        }
+
+        console.log('💰 Releasing payment from escrow...');
+        console.log('📦 Bounty Object:', bountyObjectId);
+        console.log('👤 Hacker Wallet:', hackerWallet);
+        
+        // Create transaction to call approve_and_pay
+        const tx = new Transaction();
+        
+        tx.moveCall({
+          target: `${PACKAGE_ID}::bounty_escrow::approve_and_pay`,
+          arguments: [
+            tx.object(bountyObjectId), // Bounty shared object
+            tx.pure.address(hackerWallet), // Hacker address
+          ],
+        });
+
+        tx.setGasBudget(10000000);
+
+        console.log('💳 Requesting wallet approval for payment release...');
+
+        // Execute transaction
+        const txResult = await signAndExecuteTransaction({
+          transaction: tx,
+        });
+
+        console.log('✅ Payment released!');
+        console.log('📋 TX Digest:', txResult.digest);
+
+        alert(`✅ Report Approved & Payment Released!\n\n💰 Payment sent to hacker\n🔗 TX: ${txResult.digest.slice(0, 16)}...`);
+      } else if (approve) {
+        alert('✅ Report Approved!\n\n(No payment information found)');
+      } else {
+        alert('❌ Report Rejected');
+      }
+
       await loadBountyAndSubmissions();
       setSelectedSubmission(null);
       setReviewNotes('');
 
     } catch (error) {
       console.error('Review error:', error);
-      alert('Error: ' + error.message);
+      alert('❌ Error: ' + error.message);
     } finally {
       setReviewing(null);
     }
@@ -207,14 +277,14 @@ export default function ReviewSubmissions() {
                 </div>
               </div>
 
-              {submission.status === 'pending' && isOwner && (
+              {isOwner && (
                 <div className="submission-actions">
                   <button
                     className="btn btn-secondary btn-sm"
                     onClick={() => handleDownloadAndDecrypt(submission)}
                   >
-                    <ExternalLink size={16} />
-                    View Encrypted Report
+                    <Key size={16} />
+                    Decrypt & View Report
                   </button>
                 </div>
               )}
@@ -234,10 +304,10 @@ export default function ReviewSubmissions() {
 
             <div className="modal-body">
               <div className="submission-details">
-                <h3>Encrypted Report Data</h3>
+                <h3>🔓 Decrypted Report</h3>
                 {decryptedContent && (
                   <div className="content-preview">
-                    <pre>{decryptedContent}</pre>
+                    <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{decryptedContent}</pre>
                   </div>
                 )}
               </div>

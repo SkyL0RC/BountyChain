@@ -18,7 +18,7 @@ const router = express.Router();
  */
 router.post('/', async (req, res) => {
   try {
-    const { id, title, description, rewardAmount, ownerWallet, ownerPublicKey } = req.body;
+    const { id, title, description, rewardAmount, ownerWallet, ownerPublicKey, bountyObjectId, transactionHash } = req.body;
 
     // Validation
     if (!id || !title || !rewardAmount || !ownerWallet) {
@@ -26,6 +26,9 @@ router.post('/', async (req, res) => {
         error: 'Missing required fields: id, title, rewardAmount, ownerWallet'
       });
     }
+
+    // Convert SUI to MIST (1 SUI = 1,000,000,000 MIST)
+    const rewardInMIST = Math.floor(parseFloat(rewardAmount) * 1_000_000_000);
 
     // If no public key provided, generate one for demo/testing
     let publicKey = ownerPublicKey;
@@ -38,18 +41,21 @@ router.post('/', async (req, res) => {
       privateKey = keyPair.privateKey;
     }
 
-    // Insert bounty
+    // Insert bounty with bounty_object_id and transaction_hash
     const query = await pool.query(
       `INSERT INTO bounties 
-       (id, title, description, reward_amount, owner_wallet, owner_public_key)
-       VALUES ($1, $2, $3, $4, $5, $6)
+       (id, title, description, reward_amount, owner_wallet, owner_public_key, bounty_object_id, transaction_hash)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING *`,
-      [id, title, description, rewardAmount, ownerWallet, publicKey]
+      [id, title, description, rewardInMIST, ownerWallet, publicKey, bountyObjectId, transactionHash]
     );
 
     const bounty = query.rows[0];
 
     console.log(`✅ Bounty created: ${id}`);
+    if (bountyObjectId) {
+      console.log(`🎯 Bounty Object ID: ${bountyObjectId}`);
+    }
 
     const response = {
       success: true,
@@ -59,6 +65,8 @@ router.post('/', async (req, res) => {
         description: bounty.description,
         rewardAmount: bounty.reward_amount,
         ownerWallet: bounty.owner_wallet,
+        bountyObjectId: bounty.bounty_object_id,
+        transactionHash: bounty.transaction_hash,
         status: bounty.status,
         createdAt: bounty.created_at
       }
@@ -167,6 +175,51 @@ router.get('/', async (req, res) => {
     console.error('❌ Bounties list failed:', error);
     res.status(500).json({
       error: 'Failed to list bounties',
+      details: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/bounties/:id/payment
+ * Record payment transaction for bounty
+ */
+router.post('/:id/payment', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { transactionHash, amount } = req.body;
+
+    if (!transactionHash || !amount) {
+      return res.status(400).json({
+        error: 'Missing required fields: transactionHash, amount'
+      });
+    }
+
+    // Update bounty with payment info
+    const query = await pool.query(
+      `UPDATE bounties 
+       SET transaction_hash = $1, payment_confirmed = true, updated_at = now()
+       WHERE id = $2
+       RETURNING *`,
+      [transactionHash, id]
+    );
+
+    if (query.rows.length === 0) {
+      return res.status(404).json({ error: 'Bounty not found' });
+    }
+
+    console.log(`✅ Payment recorded for bounty ${id}: ${transactionHash}`);
+
+    res.json({
+      success: true,
+      bounty: query.rows[0],
+      message: 'Payment recorded successfully'
+    });
+
+  } catch (error) {
+    console.error('❌ Payment recording failed:', error);
+    res.status(500).json({
+      error: 'Failed to record payment',
       details: error.message
     });
   }

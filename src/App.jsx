@@ -8,7 +8,6 @@ import Profile from './pages/Profile';
 import CreateBounty from './pages/CreateBounty';
 import MiniHack from './pages/MiniHack';
 import ReviewSubmissions from './pages/ReviewSubmissions';
-import TestBackend from './pages/TestBackend';
 
 function App() {
   return (
@@ -25,7 +24,6 @@ function App() {
           <Route path="/profile" element={<Profile />} />
           <Route path="/create-bounty" element={<CreateBounty />} />
           <Route path="/review/:bountyId" element={<ReviewSubmissions />} />
-          <Route path="/test" element={<TestBackend />} />
         </Routes>
       </div>
     </Router>

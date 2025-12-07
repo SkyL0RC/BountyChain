@@ -3,58 +3,6 @@ import { useCurrentAccount, useSignAndExecuteTransaction } from '@mysten/dapp-ki
 import { Transaction } from '@mysten/sui/transactions';
 import { Trophy, Clock, CheckCircle, Lock, Zap } from 'lucide-react';
 
-const mockMiniHacks = [
-  {
-    id: 1,
-    week: 12,
-    title: 'Week 12 - Smart Contract Security',
-    description: 'Find vulnerabilities in basic DeFi contracts',
-    totalPool: 500,
-    endTime: '2025-12-13',
-    isActive: true,
-    challenges: [
-      {
-        id: 0,
-        task: 'Find the integer overflow vulnerability in TokenMint.sol',
-        reward: 150,
-        difficulty: 'beginner',
-        isClaimed: false,
-      },
-      {
-        id: 1,
-        task: 'Exploit the reentrancy bug in VaultWithdraw.move',
-        reward: 200,
-        difficulty: 'intermediate',
-        isClaimed: false,
-      },
-      {
-        id: 2,
-        task: 'Break the access control in AdminPanel.rs',
-        reward: 150,
-        difficulty: 'beginner',
-        isClaimed: false,
-      },
-    ]
-  }
-];
-
-const pastMiniHacks = [
-  {
-    week: 11,
-    title: 'Week 11 - Access Control',
-    winner: '0x7a9f...5a2f',
-    totalEarned: 450,
-    endDate: '2025-12-06'
-  },
-  {
-    week: 10,
-    title: 'Week 10 - Oracle Manipulation',
-    winner: '0x4b2f...8f4b',
-    totalEarned: 550,
-    endDate: '2025-11-29'
-  }
-];
-
 export default function MiniHack() {
   const currentAccount = useCurrentAccount();
   const { mutate: signAndExecute } = useSignAndExecuteTransaction();
@@ -62,7 +10,8 @@ export default function MiniHack() {
   const [solution, setSolution] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const currentMiniHack = mockMiniHacks[0];
+  // TODO: Fetch active mini hack from contract
+  const currentMiniHack = null;
 
   const handleSolveChallenge = async (e) => {
     e.preventDefault();

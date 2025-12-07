@@ -1,9 +1,49 @@
 import { Link } from 'react-router-dom';
 import { useCurrentAccount } from '@mysten/dapp-kit';
-import { Wallet, Trophy, Zap, Shield, Lock } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Wallet, Trophy, Zap, Shield, Lock, CheckCircle } from 'lucide-react';
+
+const API_BASE_URL = 'http://localhost:3001/api';
 
 export default function Landing() {
   const currentAccount = useCurrentAccount();
+  const [completedBounties, setCompletedBounties] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchCompletedBounties = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/bounties`);
+        if (!response.ok) throw new Error('Failed to fetch');
+        const data = await response.json();
+        
+        // Completed bounties = en az 1 approved report'u olan bounties
+        const bountiesWithApprovedReports = [];
+        for (const bounty of data.bounties) {
+          try {
+            const reportsRes = await fetch(`${API_BASE_URL}/reports/bounty/${bounty.id}`);
+            if (reportsRes.ok) {
+              const reportsData = await reportsRes.json();
+              const hasApproved = reportsData.reports.some(r => r.status === 'approved');
+              if (hasApproved) {
+                bountiesWithApprovedReports.push(bounty);
+              }
+            }
+          } catch (err) {
+            console.error('Error fetching reports:', err);
+          }
+        }
+        
+        setCompletedBounties(bountiesWithApprovedReports.slice(0, 3)); // İlk 3'ünü göster
+      } catch (error) {
+        console.error('Error fetching completed bounties:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCompletedBounties();
+  }, []);
 
   return (
     <div className="landing-page">
@@ -78,6 +118,40 @@ export default function Landing() {
       </section>
 
       {/* Featured Challenges Preview */}
+      <section className="featured">
+        <div className="featured-header">
+          <h2 className="section-title">Recently Completed Bounties</h2>
+          <Link to="/hacks" className="view-all">View All Bounties →</Link>
+        </div>
+        {loading ? (
+          <div className="loading-state">Loading...</div>
+        ) : completedBounties.length > 0 ? (
+          <div className="completed-bounties-grid">
+            {completedBounties.map(bounty => (
+              <Link to={`/hack/${bounty.id}`} key={bounty.id} className="completed-bounty-card">
+                <div className="completed-badge">
+                  <CheckCircle size={20} />
+                  <span>Completed</span>
+                </div>
+                <h3>{bounty.title}</h3>
+                <div className="bounty-reward">
+                  <Trophy size={16} />
+                  <span>{bounty.rewardAmount} SUI</span>
+                </div>
+                <p className="bounty-owner-small">
+                  by {bounty.ownerWallet.slice(0, 6)}...{bounty.ownerWallet.slice(-4)}
+                </p>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <div className="empty-state-small">
+            <Trophy size={48} />
+            <p>No completed bounties yet. Be the first to solve one!</p>
+          </div>
+        )}
+      </section>
+
       <section className="featured">
         <div className="featured-header">
           <h2 className="section-title">Top Leaderboard Hackers</h2>

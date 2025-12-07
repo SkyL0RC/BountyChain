@@ -116,12 +116,6 @@ export default function HackDetail() {
             </div>
           </div>
         </div>
-
-        <div className="walrus-seal-badge">
-          <Shield size={16} />
-          <Lock size={16} />
-          <span>Reports encrypted end-to-end • Only bounty owner can decrypt</span>
-        </div>
       </div>
 
       <div className="warning-box">
