@@ -11,7 +11,7 @@
 - ✅ **Trustless Escrow**: Bounty sahibi oluştururken parayı kilitler, hacker çözünce otomatik alır
 - ✅ **Anında Ödeme**: Smart contract onayı ile direkt ödeme (2-8 hafta beklemek yok)
 - ✅ **Şifreli Raporlar**: RSA ile uçtan uca şifreleme, sadece bounty sahibi okuyabilir
-- ✅ **%0 Komisyon**: Platform ücreti yok (Immunefi %20-33 alır)
+- ✅ **%3 Komisyon**: (Immunefi %20-33 alır)
 - ✅ **Privacy-First**: Raporlar blockchain dışında, sadece hash'i kaydedilir
 
 ---
