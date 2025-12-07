@@ -1,6 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useCurrentAccount } from '@mysten/dapp-kit';
-import { Zap, Trophy, User, Plus } from 'lucide-react';
+import { Zap, Trophy, User, Plus, Sparkles } from 'lucide-react';
 import WalletConnect from './WalletConnect';
 
 export default function Navbar() {
@@ -22,6 +22,10 @@ export default function Navbar() {
         <div className="navbar-links">
           <Link to="/hacks" className={`nav-link ${isActive('/hacks')}`}>
             Challenges
+          </Link>
+          <Link to="/weekly-challenges" className={`nav-link ${isActive('/weekly-challenges')}`}>
+            <Sparkles size={18} />
+            Weekly
           </Link>
           <Link to="/leaderboard" className={`nav-link ${isActive('/leaderboard')}`}>
             <Trophy size={18} />

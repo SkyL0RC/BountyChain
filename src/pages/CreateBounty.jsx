@@ -19,6 +19,8 @@ export default function CreateBounty() {
     title: '',
     description: '',
     rewardAmount: '',
+    difficulty: 'beginner',
+    expiresInDays: '30',
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -149,6 +151,10 @@ export default function CreateBounty() {
       
       let bountyObjectId = null;
       
+      // Wait for transaction to be indexed by RPC (Sui takes a moment)
+      console.log('⏳ Waiting 3 seconds for transaction to be indexed...');
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      
       // Fetch transaction details from Sui RPC to get created objects
       try {
         console.log('🔍 Fetching transaction details from Sui RPC...');
@@ -197,6 +203,11 @@ export default function CreateBounty() {
 
       // 4. Payment başarılı olduktan SONRA backend'de bounty kaydı oluştur
       console.log('📝 Creating bounty record in database...');
+      
+      // Calculate expiration date
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + parseInt(formData.expiresInDays));
+      
       const response = await fetch(`${API_BASE_URL}/bounties`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -205,9 +216,11 @@ export default function CreateBounty() {
           title: formData.title,
           description: formData.description,
           rewardAmount: formData.rewardAmount,
+          difficulty: formData.difficulty,
+          expiresAt: expiresAt.toISOString(),
           ownerWallet: currentAccount.address,
           ownerPublicKey: keyPair.publicKey,
-          bountyObjectId: bountyObjectId, // Add Sui object ID
+          bountyObjectId: bountyObjectId,
           transactionHash: txResult.digest
         })
       });
@@ -355,6 +368,40 @@ export default function CreateBounty() {
               required
             />
             <small style={{ color: '#888', fontSize: '0.85em' }}>Minimum: 0.001 SUI</small>
+          </div>
+
+          <div className="form-row">
+            <div className="form-group">
+              <label>Difficulty Level *</label>
+              <select
+                name="difficulty"
+                className="form-select"
+                value={formData.difficulty}
+                onChange={handleChange}
+                required
+              >
+                <option value="beginner">🟢 Beginner - Easy to find bugs</option>
+                <option value="intermediate">🟡 Intermediate - Moderate complexity</option>
+                <option value="expert">🔴 Expert - Advanced vulnerabilities</option>
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label>Expires In (Days) *</label>
+              <select
+                name="expiresInDays"
+                className="form-select"
+                value={formData.expiresInDays}
+                onChange={handleChange}
+                required
+              >
+                <option value="7">7 Days</option>
+                <option value="14">14 Days</option>
+                <option value="30">30 Days</option>
+                <option value="60">60 Days</option>
+                <option value="90">90 Days</option>
+              </select>
+            </div>
           </div>
         </div>
 

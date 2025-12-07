@@ -290,6 +290,17 @@ router.post('/:id/status', async (req, res) => {
 
     console.log(`✅ Report ${id} status updated to: ${status}`);
     
+    // If approved, mark bounty as completed
+    if (status === 'approved') {
+      await pool.query(
+        `UPDATE bounties 
+         SET status = 'completed', updated_at = now()
+         WHERE id = $1`,
+        [report.bounty_id]
+      );
+      console.log(`✅ Bounty ${report.bounty_id} marked as completed`);
+    }
+    
     // Return payment info if approved
     const response = {
       success: true,

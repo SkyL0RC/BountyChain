@@ -18,7 +18,10 @@ const router = express.Router();
  */
 router.post('/', async (req, res) => {
   try {
-    const { id, title, description, rewardAmount, ownerWallet, ownerPublicKey, bountyObjectId, transactionHash } = req.body;
+    const { 
+      id, title, description, rewardAmount, difficulty, expiresAt,
+      ownerWallet, ownerPublicKey, bountyObjectId, transactionHash 
+    } = req.body;
 
     // Validation
     if (!id || !title || !rewardAmount || !ownerWallet) {
@@ -41,13 +44,13 @@ router.post('/', async (req, res) => {
       privateKey = keyPair.privateKey;
     }
 
-    // Insert bounty with bounty_object_id and transaction_hash
+    // Insert bounty with new fields
     const query = await pool.query(
       `INSERT INTO bounties 
-       (id, title, description, reward_amount, owner_wallet, owner_public_key, bounty_object_id, transaction_hash)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       (id, title, description, reward_amount, difficulty, expires_at, owner_wallet, owner_public_key, bounty_object_id, transaction_hash)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING *`,
-      [id, title, description, rewardInMIST, ownerWallet, publicKey, bountyObjectId, transactionHash]
+      [id, title, description, rewardInMIST, difficulty || 'beginner', expiresAt, ownerWallet, publicKey, bountyObjectId, transactionHash]
     );
 
     const bounty = query.rows[0];
@@ -108,8 +111,8 @@ router.get('/:id', async (req, res) => {
 
     const query = await pool.query(
       `SELECT 
-        id, title, description, reward_amount, owner_wallet, 
-        owner_public_key, status, created_at
+        id, title, description, reward_amount, difficulty, expires_at,
+        owner_wallet, owner_public_key, status, created_at
        FROM bounties
        WHERE id = $1`,
       [id]
@@ -127,6 +130,8 @@ router.get('/:id', async (req, res) => {
         title: bounty.title,
         description: bounty.description,
         rewardAmount: bounty.reward_amount,
+        difficulty: bounty.difficulty,
+        expiresAt: bounty.expires_at,
         ownerWallet: bounty.owner_wallet,
         ownerPublicKey: bounty.owner_public_key,
         status: bounty.status,
@@ -161,6 +166,8 @@ router.get('/', async (req, res) => {
       title: row.title,
       description: row.description,
       rewardAmount: row.reward_amount,
+      difficulty: row.difficulty,
+      expiresAt: row.expires_at,
       ownerWallet: row.owner_wallet,
       status: row.status,
       createdAt: row.created_at

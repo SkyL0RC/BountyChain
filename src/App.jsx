@@ -8,6 +8,7 @@ import Profile from './pages/Profile';
 import CreateBounty from './pages/CreateBounty';
 import MiniHack from './pages/MiniHack';
 import ReviewSubmissions from './pages/ReviewSubmissions';
+import WeeklyChallenges from './pages/WeeklyChallenges';
 
 function App() {
   return (
@@ -19,6 +20,7 @@ function App() {
           <Route path="/hacks" element={<HackList />} />
           <Route path="/hack/:id" element={<HackDetail />} />
           <Route path="/mini-hack" element={<MiniHack />} />
+          <Route path="/weekly-challenges" element={<WeeklyChallenges />} />
           <Route path="/leaderboard" element={<Leaderboard />} />
           <Route path="/profile/:address" element={<Profile />} />
           <Route path="/profile" element={<Profile />} />

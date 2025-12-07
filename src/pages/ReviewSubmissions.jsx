@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useCurrentAccount, useSignAndExecuteTransaction } from '@mysten/dapp-kit';
 import { Transaction } from '@mysten/sui/transactions';
-import { Check, X, Clock, AlertCircle, Shield, ExternalLink, Key } from 'lucide-react';
+import { Check, X, Clock, AlertCircle, Shield, ExternalLink, Key, FileText, User, Calendar, ArrowLeft, Coins } from 'lucide-react';
 import { decryptReport } from '../utils/backendCrypto';
 
 const API_BASE_URL = 'http://localhost:3001/api';
@@ -62,29 +62,39 @@ export default function ReviewSubmissions() {
         return;
       }
 
-      // Parse encrypted data
-      let encryptedPayload, encryptedKey;
-      try {
-        const reportTextObj = JSON.parse(reportData.reportText);
-        encryptedPayload = reportTextObj.encryptedPayload;
-        encryptedKey = reportTextObj.encryptedKey;
-      } catch (e) {
-        // Fallback to direct properties
-        encryptedPayload = reportData.encryptedPayload;
-        encryptedKey = reportData.encryptedKey;
-      }
+      // Get encrypted data directly from API response
+      const { encryptedPayload, encryptedKey } = reportData;
 
       if (!encryptedPayload || !encryptedKey) {
+        console.error('Missing encryption data:', reportData);
         alert('❌ Report data is corrupted or not encrypted');
         return;
       }
 
       // Decrypt report
       console.log('🔓 Decrypting report...');
-      const decrypted = await decryptReport(encryptedPayload, encryptedKey, privateKey);
-      console.log('✅ Report decrypted successfully');
+      console.log('📦 Encrypted Payload length:', encryptedPayload.length);
+      console.log('🔑 Encrypted Key length:', encryptedKey.length);
       
-      setDecryptedContent(decrypted);
+      const decrypted = await decryptReport(encryptedPayload, encryptedKey, privateKey);
+      
+      console.log('✅ Report decrypted successfully');
+      console.log('📄 Decrypted content:', decrypted);
+      
+      // Check if decrypted content is still encrypted (double encryption)
+      let finalContent = decrypted;
+      try {
+        const parsed = JSON.parse(decrypted);
+        if (parsed.encryptedPayload && parsed.encryptedKey) {
+          console.log('🔄 Detected double encryption, decrypting again...');
+          finalContent = await decryptReport(parsed.encryptedPayload, parsed.encryptedKey, privateKey);
+          console.log('✅ Second decryption successful:', finalContent);
+        }
+      } catch (e) {
+        // Not JSON or no double encryption, use as is
+      }
+      
+      setDecryptedContent(finalContent);
       setSelectedSubmission(submission);
       
     } catch (error) {
@@ -218,128 +228,249 @@ export default function ReviewSubmissions() {
 
   return (
     <div className="container review-page">
-      <div className="page-header">
-        <div>
-          <h1>Review Submissions</h1>
-          <p className="subtitle">{bounty.title}</p>
-        </div>
-        {isOwner && (
-          <div className="review-mode-badge">
-            <Shield size={20} />
-            <span>Your Bounty</span>
+      <button className="back-link" onClick={() => navigate(-1)}>
+        <ArrowLeft size={20} />
+        Back
+      </button>
+
+      <div className="review-hero">
+        <div className="review-hero-content">
+          <div className="review-hero-badge">
+            <Shield size={16} />
+            <span>Review Center</span>
           </div>
-        )}
-      </div>
-
-      <div className="review-info-banner">
-        <AlertCircle size={24} />
-        <div>
-          <strong>Auto-Approve: 7 days</strong>
-          <p>Pending reports will be automatically approved after 7 days if not reviewed.</p>
+          <h1 className="review-hero-title">{bounty.title}</h1>
+          <div className="review-hero-stats">
+            <div className="hero-stat">
+              <Coins size={20} />
+              <div>
+                <div className="stat-value">{(bounty.rewardAmount / 1_000_000_000).toFixed(3)} SUI</div>
+                <div className="stat-label">Reward</div>
+              </div>
+            </div>
+            <div className="hero-stat">
+              <FileText size={20} />
+              <div>
+                <div className="stat-value">{submissions.length}</div>
+                <div className="stat-label">Submissions</div>
+              </div>
+            </div>
+            <div className="hero-stat">
+              <Clock size={20} />
+              <div>
+                <div className="stat-value">7 Days</div>
+                <div className="stat-label">Auto-Approve</div>
+              </div>
+            </div>
+          </div>
+          {!isOwner && (
+            <div className="warning-banner">
+              <AlertCircle size={20} />
+              <span>You are not the owner of this bounty</span>
+            </div>
+          )}
         </div>
       </div>
 
-      <div className="submissions-grid">
+      <div className="submissions-section">
+        <h2 className="section-title">Submissions ({submissions.length})</h2>
+        
         {submissions.length === 0 ? (
-          <div className="empty-state">
-            <p>No submissions yet</p>
+          <div className="empty-submissions">
+            <FileText size={48} />
+            <h3>No submissions yet</h3>
+            <p>Waiting for hackers to submit their reports</p>
           </div>
         ) : (
-          submissions.map((submission) => (
-            <div key={submission.id} className="submission-card">
-              <div className="submission-header">
-                <div className="submission-meta">
-                  <span className="submission-index">Report ID: {submission.id.substring(0, 8)}...</span>
+          <div className="submissions-list">
+            {submissions.map((submission) => (
+              <div 
+                key={submission.id} 
+                className="modern-submission-card"
+                onClick={() => isOwner && submission.status === 'pending' && handleDownloadAndDecrypt(submission)}
+                style={{ cursor: isOwner && submission.status === 'pending' ? 'pointer' : 'default' }}
+              >
+                <div className="submission-card-header">
+                  <div className="submission-id">
+                    <FileText size={18} />
+                    <span>{submission.id.substring(0, 12)}...</span>
+                  </div>
                   <span 
-                    className="severity-badge"
-                    style={{ background: getStatusColor(submission.status) }}
+                    className="status-pill"
+                    style={{ background: getStatusColor(submission.status) + '20', color: getStatusColor(submission.status) }}
                   >
                     {getStatusLabel(submission.status)}
                   </span>
                 </div>
-                
+
+                <div className="submission-info-grid">
+                  <div className="info-item">
+                    <User size={16} />
+                    <div>
+                      <div className="info-label">Hacker</div>
+                      <div className="info-value">{submission.hacker_wallet.slice(0, 8)}...{submission.hacker_wallet.slice(-6)}</div>
+                    </div>
+                  </div>
+                  <div className="info-item">
+                    <Calendar size={16} />
+                    <div>
+                      <div className="info-label">Submitted</div>
+                      <div className="info-value">{new Date(submission.created_at).toLocaleDateString()}</div>
+                    </div>
+                  </div>
+                </div>
+
                 {submission.status === 'pending' && isOwner && (
-                  <div className="timeout-warning">
-                    <Clock size={16} />
+                  <div className="auto-approve-timer">
+                    <Clock size={14} />
                     <span>{getTimeRemaining(submission.auto_approve_at)}</span>
                   </div>
                 )}
-              </div>
 
-              <div className="submission-body">
-                <div className="info-row">
-                  <span className="label">Hacker:</span>
-                  <span className="value address">{submission.hacker_wallet.slice(0, 6)}...{submission.hacker_wallet.slice(-4)}</span>
-                </div>
-                <div className="info-row">
-                  <span className="label">Submitted:</span>
-                  <span className="value">{new Date(submission.created_at).toLocaleString()}</span>
-                </div>
-              </div>
-
-              {isOwner && (
-                <div className="submission-actions">
+                {isOwner && submission.status === 'pending' && (
                   <button
-                    className="btn btn-secondary btn-sm"
-                    onClick={() => handleDownloadAndDecrypt(submission)}
+                    className="btn-decrypt"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDownloadAndDecrypt(submission);
+                    }}
                   >
-                    <Key size={16} />
-                    Decrypt & View Report
+                    <Key size={18} />
+                    <span>Click to Decrypt & Review</span>
+                    <ExternalLink size={14} />
                   </button>
-                </div>
-              )}
-            </div>
-          ))
+                )}
+
+                {!isOwner && (
+                  <div className="submission-locked">
+                    <Shield size={16} />
+                    <span>Only bounty owner can review</span>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
         )}
       </div>
 
       {/* Review Modal */}
       {selectedSubmission && (
         <div className="modal-overlay" onClick={() => setSelectedSubmission(null)}>
-          <div className="modal review-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>Review Report</h2>
-              <button className="close-btn" onClick={() => setSelectedSubmission(null)}>×</button>
+          <div className="review-modal-modern" onClick={(e) => e.stopPropagation()}>
+            <div className="review-modal-header">
+              <div>
+                <h2>Review Report</h2>
+                <p className="modal-subtitle">ID: {selectedSubmission.id.substring(0, 16)}...</p>
+              </div>
+              <button className="modal-close" onClick={() => setSelectedSubmission(null)}>
+                <X size={20} />
+              </button>
             </div>
 
-            <div className="modal-body">
-              <div className="submission-details">
-                <h3>🔓 Decrypted Report</h3>
-                {decryptedContent && (
-                  <div className="content-preview">
-                    <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{decryptedContent}</pre>
-                  </div>
-                )}
+            <div className="review-modal-body">
+              <div className="decrypted-section">
+                <div className="section-header">
+                  <Key size={20} />
+                  <h3>Decrypted Report Content</h3>
+                </div>
+                {decryptedContent && (() => {
+                  try {
+                    const reportData = JSON.parse(decryptedContent);
+                    return (
+                      <div className="report-fields">
+                        <div className="report-field">
+                          <div className="field-label">
+                            <Shield size={16} />
+                            Impact Level
+                          </div>
+                          <div className={`field-value impact-${reportData.impact}`}>
+                            {reportData.impact?.toUpperCase() || 'N/A'}
+                          </div>
+                        </div>
+
+                        <div className="report-field">
+                          <div className="field-label">
+                            <FileText size={16} />
+                            Description
+                          </div>
+                          <div className="field-value">
+                            {reportData.description || 'No description provided'}
+                          </div>
+                        </div>
+
+                        <div className="report-field">
+                          <div className="field-label">
+                            <AlertCircle size={16} />
+                            Report Details
+                          </div>
+                          <div className="field-value report-details">
+                            {reportData.reportDetails || 'No details provided'}
+                          </div>
+                        </div>
+
+                        <div className="report-field">
+                          <div className="field-label">
+                            <User size={16} />
+                            Submitted By
+                          </div>
+                          <div className="field-value monospace">
+                            {reportData.submittedBy?.slice(0, 10)}...{reportData.submittedBy?.slice(-8)}
+                          </div>
+                        </div>
+
+                        <div className="report-field">
+                          <div className="field-label">
+                            <Calendar size={16} />
+                            Timestamp
+                          </div>
+                          <div className="field-value">
+                            {new Date(reportData.timestamp).toLocaleString()}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  } catch (e) {
+                    // Fallback: not JSON, display as text
+                    return (
+                      <div className="report-content">
+                        <pre>{decryptedContent}</pre>
+                      </div>
+                    );
+                  }
+                })()}
               </div>
 
-              <div className="form-group">
-                <label>Review Notes</label>
+              <div className="notes-section">
+                <label className="section-label">
+                  <FileText size={16} />
+                  Review Notes (Optional)
+                </label>
                 <textarea
-                  className="form-textarea"
+                  className="notes-textarea"
                   rows="4"
-                  placeholder="Add your review notes..."
+                  placeholder="Add your thoughts about this submission..."
                   value={reviewNotes}
                   onChange={(e) => setReviewNotes(e.target.value)}
                 />
               </div>
             </div>
 
-            <div className="modal-footer">
+            <div className="review-modal-footer">
               <button
-                className="btn btn-danger"
+                className="btn-review btn-reject"
                 onClick={() => handleReview(selectedSubmission.id, false)}
                 disabled={reviewing !== null}
               >
                 <X size={18} />
-                Reject
+                <span>Reject Report</span>
               </button>
               <button
-                className="btn btn-success"
+                className="btn-review btn-approve"
                 onClick={() => handleReview(selectedSubmission.id, true)}
                 disabled={reviewing !== null}
               >
                 <Check size={18} />
-                Approve
+                <span>Approve & Pay</span>
               </button>
             </div>
           </div>

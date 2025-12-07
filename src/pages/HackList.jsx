@@ -42,11 +42,19 @@ export default function HackList() {
     filteredHacks = filteredHacks.filter(h => h.status === 'active');
   } else if (statusFilter === 'expired') {
     filteredHacks = filteredHacks.filter(h => h.status === 'expired');
+  } else if (statusFilter === 'all') {
+    // Show only active and expired, hide completed
+    filteredHacks = filteredHacks.filter(h => h.status !== 'completed');
+  } else if (statusFilter === 'my-submissions') {
+    // TODO: Filter by current user's submissions when auth is added
+    filteredHacks = filteredHacks.filter(h => h.status !== 'completed');
   }
 
-  // Difficulty filtresi (şimdilik backend'de difficulty yok, ileride eklenebilir)
+  // Difficulty filtresi
   if (difficultyFilter !== 'all') {
-    filteredHacks = filteredHacks.filter(h => h.difficulty === difficultyFilter);
+    filteredHacks = filteredHacks.filter(h => 
+      h.difficulty && h.difficulty.toLowerCase() === difficultyFilter.toLowerCase()
+    );
   }
 
   // Sıralama
@@ -83,7 +91,7 @@ export default function HackList() {
   return (
     <div className="hack-list-page">
       <div className="page-header">
-        <h1>Mini Hack Challenges</h1>
+        <h1>Hack Challenges</h1>
         <p>First to solve wins the full reward. No sharing. No second place.</p>
       </div>
 
@@ -158,7 +166,7 @@ export default function HackList() {
             <Link to={`/hack/${hack.id}`} key={hack.id} className="hack-card">
               <div className="hack-card-header">
                 <span className={`difficulty-badge ${hack.difficulty || 'beginner'}`}>
-                  {hack.difficulty || 'standard'}
+                  {(hack.difficulty || 'beginner').charAt(0).toUpperCase() + (hack.difficulty || 'beginner').slice(1)}
                 </span>
                 <span className={`status-badge ${hack.status}`}>
                   {hack.status === 'active' ? (
@@ -182,7 +190,7 @@ export default function HackList() {
 
             <div className="hack-meta">
               <div className="reward">
-                <span className="reward-amount">{hack.rewardAmount} SUI</span>
+                <span className="reward-amount">{(hack.rewardAmount / 1_000_000_000).toFixed(3)} SUI</span>
                 <span className="reward-label">Reward</span>
               </div>
               <div className="timer">
@@ -205,30 +213,34 @@ export default function HackList() {
         )}
       </div>
 
-      {/* Past Weeks Archive */}
+      {/* Completed Bounties Archive */}
       <section className="archive-section">
         <div 
           className="archive-header"
           onClick={() => setShowArchive(!showArchive)}
         >
-          <h3>Past Weeks Archive</h3>
+          <h3>Completed Bounties</h3>
           {showArchive ? <ChevronUp size={24} /> : <ChevronDown size={24} />}
         </div>
         
         {showArchive && (
           <div className="archive-content">
-            {pastWeeks.map((week) => (
-              <div key={week.week} className="archive-week-card">
-                <div className="archive-week-title">{week.title}</div>
-                <div className="archive-week-meta">
-                  <span className="archive-reward">{week.reward} SUI</span>
-                  <span className="archive-challenges">{week.challenges} challenges</span>
-                </div>
-                <div className="archive-week-winner">
-                  Winner: {week.winner}
-                </div>
-              </div>
-            ))}
+            {bounties.filter(hack => hack.status === 'completed').length === 0 ? (
+              <p className="no-hacks">No completed bounties yet</p>
+            ) : (
+              bounties.filter(hack => hack.status === 'completed').map((hack) => (
+                <Link to={`/hack/${hack.id}`} key={hack.id} className="archive-week-card">
+                  <div className="archive-week-title">{hack.title}</div>
+                  <div className="archive-week-meta">
+                    <span className="archive-reward">{(hack.rewardAmount / 1_000_000_000).toFixed(3)} SUI</span>
+                    <span className="archive-challenges">{hack.difficulty || 'N/A'}</span>
+                  </div>
+                  <div className="archive-week-winner">
+                    ✅ Completed
+                  </div>
+                </Link>
+              ))
+            )}
           </div>
         )}
       </section>

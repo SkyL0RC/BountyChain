@@ -97,7 +97,7 @@ export default function HackDetail() {
           <div className="meta-item reward-big">
             <Trophy size={24} />
             <div>
-              <div className="meta-value">{hack.rewardAmount} SUI</div>
+              <div className="meta-value">{(hack.rewardAmount / 1_000_000_000).toFixed(3)} SUI</div>
               <div className="meta-label">Reward</div>
             </div>
           </div>
@@ -174,7 +174,7 @@ export default function HackDetail() {
       {showSubmitModal && (
         <SubmitPoCModal 
           hackTitle={hack.title}
-          reward={hack.rewardAmount}
+          reward={(hack.rewardAmount / 1_000_000_000).toFixed(3)}
           bountyId={id}
           onClose={() => setShowSubmitModal(false)}
         />

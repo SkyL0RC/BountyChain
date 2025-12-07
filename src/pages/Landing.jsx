@@ -51,21 +51,21 @@ export default function Landing() {
       <section className="hero">
         <div className="hero-content">
           <h1 className="hero-title">
-            The First Zero-Admin,<br />
-            <span className="gradient-text">Fully On-Chain Bug Bounty Platform</span><br />
-            <span className="hero-subtitle-small">on Sui</span>
+            Decentralized Bug Bounty Platform<br />
+            <span className="gradient-text">With On-Chain Escrow & Encrypted Reports</span><br />
+            <span className="hero-subtitle-small">Built on Sui Blockchain</span>
           </h1>
           <p className="hero-subtitle">
-            Powered by Walrus & Seal. Secure, transparent, and fully decentralized.
+            Lock funds in smart contracts. Submit encrypted vulnerability reports. Get paid instantly when approved.
           </p>
           <div className="cta-buttons">
             <Link to="/hacks" className="btn btn-primary">
               <Trophy size={20} />
               Explore Bounties
             </Link>
-            <Link to="/mini-hack" className="btn btn-secondary">
+            <Link to="/weekly-challenges" className="btn btn-secondary">
               <Zap size={20} />
-              Weekly Mini Hacks
+              Weekly Challenges
             </Link>
           </div>
         </div>
@@ -97,22 +97,22 @@ export default function Landing() {
             <div className="step-icon">
               <Trophy />
             </div>
-            <h3>1. Create</h3>
-            <p>Projects lock funds in escrow and create bounties with custom rules and rewards.</p>
+            <h3>1. Create Bounty</h3>
+            <p>Lock SUI in on-chain escrow. Set reward amount, difficulty level, and expiration. Funds stay secure until approved.</p>
           </div>
           <div className="step">
             <div className="step-icon">
               <Shield />
             </div>
-            <h3>2. Submit</h3>
-            <p>Hackers find bugs and submit findings encrypted with Seal, stored on Walrus.</p>
+            <h3>2. Submit Report</h3>
+            <p>Find vulnerabilities and submit encrypted reports. Only bounty owner can decrypt your findings using their private key.</p>
           </div>
           <div className="step">
             <div className="step-icon">
               <Wallet />
             </div>
-            <h3>3. Get Paid</h3>
-            <p>Smart contracts verify and release rewards instantly. No middlemen, no delays.</p>
+            <h3>3. Get Paid Instantly</h3>
+            <p>Owner reviews and approves your report. Smart contract automatically releases payment to your wallet. No delays, no middlemen.</p>
           </div>
         </div>
       </section>
@@ -136,7 +136,7 @@ export default function Landing() {
                 <h3>{bounty.title}</h3>
                 <div className="bounty-reward">
                   <Trophy size={16} />
-                  <span>{bounty.rewardAmount} SUI</span>
+                  <span>{(bounty.rewardAmount / 1_000_000_000).toFixed(3)} SUI</span>
                 </div>
                 <p className="bounty-owner-small">
                   by {bounty.ownerWallet.slice(0, 6)}...{bounty.ownerWallet.slice(-4)}

@@ -243,7 +243,7 @@ export default function Profile() {
                   <span className={`status-badge ${bounty.status}`}>{bounty.status}</span>
                 </div>
                 <div className="bounty-item-meta">
-                  <span className="reward">{bounty.rewardAmount} SUI</span>
+                  <span className="reward">{(bounty.rewardAmount / 1_000_000_000).toFixed(3)} SUI</span>
                   <span className="date">{new Date(bounty.createdAt).toLocaleDateString()}</span>
                 </div>
                 {bounty.description && (
@@ -275,7 +275,7 @@ export default function Profile() {
                   <span className="status-badge approved">Solved</span>
                 </div>
                 <div className="bounty-item-meta">
-                  <span className="reward">{bounty.rewardAmount} SUI</span>
+                  <span className="reward">{(bounty.rewardAmount / 1_000_000_000).toFixed(3)} SUI</span>
                   <span className="date">{new Date(bounty.createdAt).toLocaleDateString()}</span>
                 </div>
                 {bounty.description && (
