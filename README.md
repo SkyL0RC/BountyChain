@@ -15,6 +15,10 @@
 - ✅ **Privacy-First**: Raporlar blockchain dışında, sadece hash'i kaydedilir
 
 ---
+demo video:
+https://github.com/user-attachments/assets/a746f408-6e63-4ce6-baa6-2752fff9ca3a
+
+
 
 ## 🚀 Kurulum
 
